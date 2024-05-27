@@ -15,7 +15,7 @@ from . import build, code
 
 logger = logging.getLogger("app")
 
-ARCH_MAP = {"aarch64": "arm64", "arm64": "arm64", "x86_64": "x86"}
+ARCH_MAP = {"aarch64": "arm64", "arm64": "arm64", "x86_64": "amd64"}
 
 
 class Info(NamedTuple):
@@ -55,7 +55,7 @@ async def _run(repo: code.Repo, path: Path, build_output: build.Output) -> None:
     info = _read_info(path=path)
     print(info)
     await _deploy_or_refresh_app(
-        model=model, build_output=build_output, info=info, path=path
+        model=model, build_output=build_output, info=info, path=path, repo=repo
     )
 
 
@@ -111,7 +111,7 @@ def _read_info(path: Path) -> Info:
 
 
 async def _deploy_or_refresh_app(
-    model: Model, build_output: build.Output, info: Info, path: Path
+    model: Model, build_output: build.Output, info: Info, path: Path, repo: code.Repo
 ) -> None:
     """Deploy or refresh app.
 
@@ -119,14 +119,15 @@ async def _deploy_or_refresh_app(
         model: The model to deploy into.
         build_outputs: The rock and charm to deploy.
         path: The directory with the code.
+        repo: The repo to deploy for.
     """
+    image_name_version = f"{info.rock_name}:{info.rock_version}.{repo.commit_sha}"
     logger.info(
-        "uploading rock %s to registry as %s:%s",
+        "uploading rock %s to registry as %s",
         build_output.rock,
-        info.rock_name,
-        info.rock_version,
+        image_name_version,
     )
-    flask_app_image = f"localhost:32000/{info.rock_name}:{info.rock_version}"
+    flask_app_image = f"localhost:32000/{image_name_version}"
     skopeo_output = subprocess.check_output(
         f"skopeo --insecure-policy copy --dest-tls-verify=false oci-archive:{build_output.rock} "
         f"docker://{flask_app_image}",

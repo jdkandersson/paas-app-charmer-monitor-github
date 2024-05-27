@@ -15,10 +15,12 @@ class Repo(NamedTuple):
     Attributes:
         url: The URL to the repo.
         branch: The name of a branch.
+        commit_sha: The commit SHA of the push.
     """
 
     url: str
     branch: str
+    commit_sha: str
 
 
 def get(repo: Repo, path: Path) -> None:

@@ -1,21 +1,41 @@
 import json
 import logging
-import sys
 import tempfile
 from http import HTTPStatus
 from pathlib import Path
 
+from celery import shared_task
 from flask import Flask, request
 
-from src import build, code, deploy
+from src import background, build, code, deploy, handle
 
 app = Flask(__name__)
 app.config.from_prefixed_env()
 app.logger.setLevel(logging.INFO)
+app.config.from_mapping(
+    CELERY=dict(
+        broker_url="redis://10.1.168.227:6379",
+        result_backend="redis://10.1.168.227:6379",
+        task_ignore_result=True,
+    ),
+)
+celery_app = background.init(app)
 
 
 REPO_KEY = "repo"
 BRNCH_KEY = "branch"
+
+
+@shared_task(ignore_result=False)
+def handle_push(repo_url: str, branch_name: str, commit_sha: str) -> None:
+    """Handle a push to a repo.
+
+    Args:
+        repo_url: The URL to a repo.
+        branch_name: The name of the branch.
+        commit_sha: The commit SHA of the push.
+    """
+    handle(repo_url=repo_url, branch_name=branch_name, commit_sha=commit_sha)
 
 
 @app.route("/test", methods=["POST"])
@@ -28,11 +48,16 @@ def test():
         len(ref_parts := request_json["ref"].split("/")) == 3
     ):
         branch_name = ref_parts[-1]
+        commit_sha = request_json["after"]
 
         app.logger.info("got %s %s", repo_url, branch_name)
 
-        return "chaneg update"
-    return "not a change update"
+        result = handle_push.delay(
+            repo_url=repo_url, branch_name=branch_name, commit_sha=commit_sha
+        )
+
+        return "push with branch"
+    return "push without branch"
 
 
 @app.route("/", methods=["POST"])
